@@ -1,9 +1,7 @@
 package br.com.forum_hub.domain.usuario;
 
 import br.com.forum_hub.domain.perfil.DadosPerfil;
-import br.com.forum_hub.domain.perfil.PerfilNome;
 import br.com.forum_hub.domain.perfil.PerfilRepository;
-import br.com.forum_hub.infra.email.EmailService;
 import br.com.forum_hub.infra.exception.RegraDeNegocioException;
 import br.com.forum_hub.infra.seguranca.HierarquiaService;
 import jakarta.transaction.Transactional;
@@ -14,19 +12,19 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.Optional;
+
 @Service
 public class UsuarioService implements UserDetailsService {
 
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
-    private final EmailService emailService;
     private final PerfilRepository perfilRepository;
     private final HierarquiaService hierarquiaService;
 
-    public UsuarioService(UsuarioRepository usuarioRepository, PasswordEncoder passwordEncoder, EmailService emailService, PerfilRepository perfilRepository, HierarquiaService hierarquiaService) {
+    public UsuarioService(UsuarioRepository usuarioRepository, PasswordEncoder passwordEncoder, PerfilRepository perfilRepository, HierarquiaService hierarquiaService) {
         this.usuarioRepository = usuarioRepository;
         this.passwordEncoder = passwordEncoder;
-        this.emailService = emailService;
         this.perfilRepository = perfilRepository;
         this.hierarquiaService = hierarquiaService;
     }
@@ -37,21 +35,8 @@ public class UsuarioService implements UserDetailsService {
                 .orElseThrow(() -> new UsernameNotFoundException("O usuário não foi encontrado!"));
     }
 
-    @Transactional
-    public Usuario cadastrar(DadosCadastroUsuario dados) {
-        var senhaCriptografada = passwordEncoder.encode(dados.senha());
-
-        var perfil = perfilRepository.findByNome(PerfilNome.ESTUDANTE);
-        var usuario = new Usuario(dados, senhaCriptografada, perfil);
-
-        emailService.enviarEmailVerificacao(usuario);
-        return usuarioRepository.save(usuario);
-    }
-
-    @Transactional
-    public void verificarEmail(String codigo) {
-        var usuario = usuarioRepository.findByToken(codigo).orElseThrow();
-        usuario.verificar();
+    public Optional<Usuario> obterUsuarioPorEmail(String email) {
+        return usuarioRepository.findByEmailIgnoreCaseAndVerificadoTrue(email);
     }
 
     public Usuario buscarPeloNomeUsuario(String nomeUsuario) {
@@ -100,5 +85,9 @@ public class UsuarioService implements UserDetailsService {
     public void reativarUsuario(Long id) {
         var usuario = usuarioRepository.findById(id).orElseThrow();
         usuario.reativar();
+    }
+
+    public Optional<Usuario> getUsuarioById(Long idUsuario) {
+        return usuarioRepository.findById(idUsuario);
     }
 }

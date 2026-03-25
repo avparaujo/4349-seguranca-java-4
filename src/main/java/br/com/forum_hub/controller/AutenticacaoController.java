@@ -1,16 +1,14 @@
 package br.com.forum_hub.controller;
 
-import br.com.forum_hub.domain.autenticacao.DadosLogin;
-import br.com.forum_hub.domain.autenticacao.DadosRefreshToken;
-import br.com.forum_hub.domain.autenticacao.DadosToken;
-import br.com.forum_hub.domain.autenticacao.TokenService;
+import br.com.forum_hub.domain.autenticacao.*;
 import br.com.forum_hub.domain.usuario.Usuario;
-import br.com.forum_hub.domain.usuario.UsuarioRepository;
+import br.com.forum_hub.domain.usuario.UsuarioService;
+import br.com.forum_hub.infra.seguranca.TOTP.TotpService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,34 +18,39 @@ public class AutenticacaoController {
 
     private final AuthenticationManager authenticationManager;
     private final TokenService tokenService;
-    private final UsuarioRepository usuarioRepository;
+    private final UsuarioService usuarioService;
+    private final TotpService totpService;
 
-    public AutenticacaoController(AuthenticationManager authenticationManager, TokenService tokenService, UsuarioRepository usuarioRepository) {
+    public AutenticacaoController(AuthenticationManager authenticationManager, TokenService tokenService, UsuarioService usuarioService, TotpService totpService) {
         this.authenticationManager = authenticationManager;
         this.tokenService = tokenService;
-        this.usuarioRepository = usuarioRepository;
+        this.usuarioService = usuarioService;
+        this.totpService = totpService;
     }
 
     @PostMapping("/login")
     public ResponseEntity<DadosToken> efetuarLogin(@Valid @RequestBody DadosLogin dados){
-        var autenticationToken = new UsernamePasswordAuthenticationToken(dados.email(), dados.senha());
-        var authentication = authenticationManager.authenticate(autenticationToken);
+        var authenticationToken = new UsernamePasswordAuthenticationToken(dados.email(), dados.senha());
+        var authentication = authenticationManager.authenticate(authenticationToken);
+        return ResponseEntity.ok(tokenService.dadosToken((Usuario) authentication.getPrincipal(), true));
+    }
 
-        String tokenAcesso = tokenService.gerarToken((Usuario) authentication.getPrincipal());
-        String refreshToken = tokenService.gerarRefreshToken((Usuario) authentication.getPrincipal());
+    @PostMapping("/verificar-a2f")
+    public ResponseEntity<DadosToken> verificarSegundoFator(@Valid @RequestBody DadosA2f dadosA2f){
+        var usuario = usuarioService.obterUsuarioPorEmail(dadosA2f.email())
+                .orElseThrow();
 
-        return ResponseEntity.ok(new DadosToken(tokenAcesso, refreshToken));
+        if(!totpService.verificarCodigo(dadosA2f.codigo(),  usuario)){
+            throw new BadCredentialsException("Código invalido");
+        }
+        return ResponseEntity.ok(tokenService.dadosToken(usuario, false));
     }
 
     @PostMapping("/atualizar-token")
     public ResponseEntity<DadosToken> atualizarToken(@Valid @RequestBody DadosRefreshToken dados){
         var refreshToken = dados.refreshToken();
         Long idUsuario = Long.valueOf(tokenService.verificarToken(refreshToken));
-        var usuario = usuarioRepository.findById(idUsuario).orElseThrow();
-
-        String tokenAcesso = tokenService.gerarToken(usuario);
-        String tokenAtualizacao = tokenService.gerarRefreshToken(usuario);
-
-        return ResponseEntity.ok(new DadosToken(tokenAcesso, tokenAtualizacao));
+        var usuario = usuarioService.getUsuarioById(idUsuario).orElseThrow();
+        return ResponseEntity.ok(tokenService.dadosToken(usuario, false));
     }
 }

@@ -17,7 +17,7 @@ import java.util.Date;
 
 @Service
 public class TokenService {
-    public String gerarToken(Usuario usuario){
+    private String gerarToken(Usuario usuario){
         try {
             Algorithm algorithm = Algorithm.HMAC256("12345678");
             return JWT.create()
@@ -30,7 +30,7 @@ public class TokenService {
         }
     }
 
-    public String gerarRefreshToken(Usuario usuario) {
+    private String gerarRefreshToken(Usuario usuario) {
         try {
             Algorithm algorithm = Algorithm.HMAC256("12345678");
             return JWT.create()
@@ -60,5 +60,16 @@ public class TokenService {
 
     private Instant expiracao(Integer minutos) {
         return LocalDateTime.now().plusMinutes(minutos).toInstant(ZoneOffset.of("-03:00"));
+    }
+
+    public DadosToken dadosToken(Usuario usuario, Boolean validarA2f){
+        String tokenAcesso = gerarToken(usuario);
+        String tokenAtualizacao = gerarRefreshToken(usuario);
+
+        if (validarA2f && usuario.isA2fAtiva()){
+            return new DadosToken(null, null, usuario.isA2fAtiva());
+        }
+
+        return new DadosToken(tokenAcesso, tokenAtualizacao, false);
     }
 }
